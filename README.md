@@ -22,6 +22,8 @@ AI 可以检查环境、安装依赖、生成配置、测试和部署。**本人
 | 身份 | 只接受二维码绑定者的私聊，只向该绑定者发送 |
 | 状态 | 持久队列、稳定 ID 去重、API 接受/失败/不确定状态 |
 
+微信侧的 owner-only 限制的是收发对象。MCP 侧隐私依赖 **Tunnel 和插件的访问控制**：桥接没有逐调用者身份认证，任何获准调用该隧道工具的人都可能读取绑定者消息、请求向绑定者发送。使用仅本人可访问的专用私有隧道与插件，核对组织/工作区授权，不向其他账号共享工具访问权限。
+
 图片/文件出站需要把**实际字节**经认证 MCP 分块传到桥接服务器，之后流式加密上传腾讯 CDN。另一个机器上的路径或无法访问的 URL 不能代替文件内容。微信群、多用户收发、原音频识别、自动转发全部聊天不在当前范围。
 
 ## 配置前检查
@@ -64,19 +66,19 @@ bin/tunnel-client help quickstart
 
 ## 3. 生成私有配置并连上隧道
 
-使用真实 tunnel ID 和**平台订阅请求实际使用的精确 callback hostname**。下面占位符必须替换；不要照抄，不能用 `*` 或放开全部互联网域名。
+首次还不知道 callback hostname 时，使用真实 tunnel ID 和显式的发现模式。此模式的回调允许列表为空，**拒绝全部回调且不建立订阅**，但允许连接 MCP 工具；第5步再从本人授权的订阅请求中核实精确主机。下面 tunnel ID 占位符必须替换。
 
 ```sh
 .venv/bin/python scripts/render-config.py \
   --tunnel-id '<YOUR_TUNNEL_ID>' \
-  --callback-host '<EXACT_PLATFORM_CALLBACK_HOST>'
+  --discover-callback
 bin/tunnel-client doctor --profile-file runtime/profile.yaml --explain
 bin/tunnel-client run --profile-file runtime/profile.yaml
 ```
 
 生成器引用当前安装目录的 Python、源码、状态和密钥文件；服务健康地址仅监听 `127.0.0.1` 动态端口。配置不需要新增公网入站端口、修改代理或关闭防火墙。
 
-callback host 可从实际平台订阅元数据或桥接的受控订阅诊断取得；诊断只记录 hostname/错误类别。首次订阅若因 allowlist 失败，核实平台来源后用 `render-config.py --replace` 增加该精确 host，重启并重试原订阅。不要把 callback URL、签名密钥或完整日志贴到公开聊天/Issue。
+若已从本人授权的平台订阅元数据核实精确 callback hostname，可用 `--callback-host '<EXACT_PLATFORM_CALLBACK_HOST>'` 替代 `--discover-callback`，最多重复3次。不能用 `*` 或放开全部互联网域名，也不能自动信任未经核实的请求主机。
 
 通过标准：doctor 检查通过、`/healthz` 和 `/readyz` 返回200。`runtime/state/service-health.url` 存放私有环回地址。此时只证明隧道和 MCP 存活，尚未绑定微信。
 
@@ -84,7 +86,7 @@ callback host 可从实际平台订阅元数据或桥接的受控订阅诊断取
 
 在支持的 ChatGPT/AI 产品中创建私有开发者 MCP 插件，选用已关联的 Tunnel。使用产品公开提供的设置界面与权限，保持服务器运行。调用 `get_weixin_status`，确认工具实际可调用。完整 schema 在 [docs/mcp-schema.json](docs/mcp-schema.json)。
 
-Linux 长期运行可审阅生成的 unit 后安装：
+Linux 长期运行先在第3步运行隧道的终端按 **Ctrl-C**，等待 `tunnel-client` 与子 worker 完全退出，再审阅生成的 unit 并安装。不要同时启动前台和 systemd 实例；安装器会在更改文件归属或 unit 前检查 worker 锁，发现活动 worker 时退出。
 
 ```sh
 sudo sh scripts/install-service.sh
@@ -100,13 +102,27 @@ sudo -u dotsbridge .venv/bin/python probe/login.py --state-dir runtime/state --p
 
 如果微信要求额外校验码，由本人按提示在私有终端处理 `--verify-stdin`；不能让助手从聊天读取验证码。超时需重新开始二维码流程。绑定者身份变化会被拒绝，不能用更换二维码静默切换为另一个收件人。
 
-macOS 前台运行：在另一个终端使用相同命令，去掉 `sudo -u dotsbridge`；保留 `tunnel-client run` 进程。Linux 已运行 systemd 后不要再启动第二个 foreground/runtime 实例。
+macOS 前台运行：在另一个终端使用相同命令，去掉 `sudo -u dotsbridge`；保留 `tunnel-client run` 进程。macOS 前台运行没有 systemd 的 CPU/内存限额，仍保留文件、块、缓存和队列上限。Linux 已运行 systemd 后不要再启动第二个 foreground/runtime 实例。
 
 通过标准：QR 轮询 `confirmed`；随后 `get_weixin_status` 返回 `bound=true / owner_only=true / account_status=ready`，收到微信消息后 `connected=true`、`last_error=null`。这证明绑定和轮询，没有证明 AI 事件订阅已经工作。
 
 ## 5. 为微信来信创建一个事件订阅
 
 让支持 MCP Events 的调用方通过公开的 `events/list` 找到 `weixin.message`，以 arguments `{}` 创建并维护**一个**订阅。公开协议使用 `events/subscribe` / `events/unsubscribe`，callback URL 和签名由调用方提供。本桥接验证 HTTPS callback、公共 DNS、精确主机允许列表并持久保存订阅。
+
+第3步若使用了发现模式，先让本人授权的调用方尝试一次 `weixin.message` 订阅。预期返回 `invalid_destination`，不会发送网络回调或留下有效订阅。调用 `get_probe_status`（arguments `{}`），从 `recent_rpc` 的 `events/subscribe / received` 记录读取 `callback_host`；该工具不需要创建 `test.ping` 订阅。诊断仅有 hostname/错误类别，不含完整 URL 或签名。将主机与平台订阅元数据或管理员确认的信息核对；来源无法确认就停止订阅配置，保持拒绝全部回调。
+
+核实后，Linux 在最终安装目录执行以下命令，保留原 key、state 与 QR 绑定：
+
+```sh
+sudo systemctl stop dots-wechat-bridge.service
+sudo -u dotsbridge .venv/bin/python scripts/render-config.py \
+  --tunnel-id '<YOUR_TUNNEL_ID>' \
+  --callback-host '<VERIFIED_EXACT_PLATFORM_CALLBACK_HOST>' --replace
+sudo systemctl start dots-wechat-bridge.service
+```
+
+macOS 先按 Ctrl-C 并等待前台隧道退出，用同一 `render-config.py` 命令去掉 `sudo -u dotsbridge`，随后重启第3步的前台隧道。重新验证 health/ready 与 MCP 工具，再让原调用方重试原 `weixin.message` 订阅。确切主机允许列表仍受 HTTPS、公共 DNS 和地址校验约束。不要把 callback URL、签名密钥或完整日志贴到公开聊天/Issue。
 
 收到 `weixin.message` 的 message_id 后，助手遵循 [回复工作流](docs/REPLY-WORKFLOW.md)：读取原文/实际附件，再发送回答。订阅到期需要由调用方刷新；服务器在线本身不会永久维持调用方任务。
 
@@ -131,11 +147,13 @@ sudo -u dotsbridge .venv/bin/python scripts/safe-status.py --state-dir runtime/s
 systemctl show dots-wechat-bridge.service --property=MemoryCurrent,MemoryMax,CPUQuotaPerSecUSec,TasksCurrent
 ```
 
+最后两条针对已安装的 Linux 服务；macOS 的状态命令去掉 `sudo -u dotsbridge`，不运行 systemctl。
+
 验收结束应检查服务 cgroup 的 `memory.peak` 和 `memory.events`，记录测量样本、时间范围及 OOM 计数；小样本通过不能宣称已完成20MiB压力测试。
 
 ## 资源边界与维护
 
-单文件20MiB，块64KiB，入/出站共享缓存128MiB/7天；下载并发1、出站上传并发1、未承诺上传8、待发队列32，重试最多3次。服务最多使用1核、内存384MiB；图片800万像素/预览最长边2048。上传、整文件 hash 和加密走小块，不把整文件 base64 塞进对话。原入站解密使用20MiB有界缓冲。
+单文件20MiB，块64KiB，入/出站共享缓存128MiB/7天；下载并发1、出站上传并发1、未承诺上传8、待发队列32，重试最多3次。Linux 模板 systemd 服务最多使用1核、内存384MiB；macOS 前台没有这些系统级限额。图片800万像素/预览最长边2048。上传、整文件 hash 和加密走小块，不把整文件 base64 塞进对话。原入站解密使用20MiB有界缓冲。
 
 私有单次出站小样本运行的服务 cgroup 峰值约35.1MiB、OOM计数0；离线2MiB文件+小PNG出站峰值RSS约37MiB。这是样本实测。数据库消息历史持久保留，7天TTL针对媒体缓存；按自己的保留策略管理私有历史和备份。
 

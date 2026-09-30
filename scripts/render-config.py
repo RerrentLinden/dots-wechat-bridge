@@ -7,13 +7,15 @@ import re
 import shlex
 
 
-def render(root, tunnel_id, callback_hosts, replace=False):
+def render(root, tunnel_id, callback_hosts, replace=False, discover_callback=False):
     root=Path(root).resolve()
     if not re.fullmatch(r'/[A-Za-z0-9_./-]+',str(root)):
         raise ValueError('Use an absolute installation path without spaces or shell metacharacters')
     if not re.fullmatch(r'tunnel_[a-f0-9]{32}',tunnel_id):
         raise ValueError('Use the actual tunnel ID returned by Platform')
-    if not 1<=len(callback_hosts)<=3 or any(not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?',h) or '.' not in h or '..' in h for h in callback_hosts):
+    if discover_callback and callback_hosts:
+        raise ValueError('Discovery must deny all callbacks; do not combine it with callback hosts')
+    if (not discover_callback and not 1<=len(callback_hosts)<=3) or any(not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?',h) or '.' not in h or '..' in h for h in callback_hosts):
         raise ValueError('Supply 1..3 exact callback hostnames observed from the authorized platform subscription')
     runtime=root/'runtime'; runtime.mkdir(mode=0o700,exist_ok=True)
     os.chmod(runtime,0o700)
@@ -33,11 +35,13 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--root',default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument('--tunnel-id',required=True)
-    parser.add_argument('--callback-host',action='append',required=True)
+    destination=parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument('--callback-host',action='append')
+    destination.add_argument('--discover-callback',action='store_true',help='Deny all callbacks while discovering the authorized subscription hostname')
     parser.add_argument('--replace',action='store_true',help='Update only rendered config; preserves key and database')
     args=parser.parse_args()
     try:
-        runtime=render(args.root,args.tunnel_id,args.callback_host,args.replace)
+        runtime=render(args.root,args.tunnel_id,args.callback_host or [],args.replace,args.discover_callback)
         print('Rendered private profile and service in '+str(runtime))
     except (ValueError,OSError) as exc:
         parser.exit(1,type(exc).__name__+': config not generated; check inputs/file ownership\n')

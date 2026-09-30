@@ -175,6 +175,24 @@ class ProbeTests(unittest.TestCase):
 
 
 class NetworkPolicyTests(unittest.TestCase):
+    def test_discovery_rejects_subscription_without_dns_socket_or_persistence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            probe=Probe(directory,allowed_hosts=[])
+            self.addCleanup(probe.close)
+            request={'jsonrpc':'2.0','id':1,'method':'events/subscribe','params':{
+                'name':'weixin.message','arguments':{},'delivery':{'mode':'webhook','url':URL,'secret':SECRET}}}
+            record_rpc_diagnostic(directory,request)
+            with patch('socket.getaddrinfo') as dns, patch('socket.create_connection') as connect:
+                response=probe.rpc(request)
+                self.assertEqual(response['error']['data']['reason'],'invalid_destination')
+                dns.assert_not_called(); connect.assert_not_called()
+            record_rpc_diagnostic(directory,request,response,completed=True)
+            status=probe.status()
+            self.assertEqual(status['active_subscriptions'],0)
+            self.assertEqual(status['recent_rpc'][0]['callback_host'],HOST)
+            self.assertNotIn(SECRET,json.dumps(status))
+            self.assertNotIn('/events',json.dumps(status))
+
     def test_exact_public_callback_host_with_synthetic_path_preserves_exact_allowlist(self):
         host = "callbacks.example.com"
         url = "https://" + host + "/mcp-events/synthetic-callback"

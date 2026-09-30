@@ -2,7 +2,15 @@
 
 ## 每次检查
 
-使用 `scripts/safe-status.py --state-dir runtime/state` 查看受控状态；工具 get_weixin_status 查看MCP实际可用性。检查systemd enabled/active/running、health/ready200、last_error、轮询时间、一个weixin.message订阅和发送终态。原始数据库、附件、QR、profile与日志保持私有。
+在最终安装目录操作。Linux 安装后的 runtime 属于 dotsbridge，目录权限700，不向普通登录用户开放。以服务用户运行只读状态脚本：
+
+```sh
+cd /opt/dots-wechat-bridge
+sudo -u dotsbridge .venv/bin/python scripts/safe-status.py --state-dir runtime/state
+systemctl show dots-wechat-bridge.service --property=ActiveState,SubState,UnitFileState,MemoryCurrent,MemoryMax,CPUQuotaPerSecUSec
+```
+
+macOS 前台部署使用 `.venv/bin/python scripts/safe-status.py --state-dir runtime/state`，无须服务用户或 systemd。工具 get_weixin_status 查看MCP实际可用性。检查health/ready200、last_error、轮询时间、一个weixin.message订阅和发送终态。原始数据库、附件、QR、profile与日志保持私有。
 
 ## 更新
 
@@ -21,10 +29,18 @@
 
 ## Runtime key
 
-创建时记录表单实际到期时间。到期前本人创建替代专用runtime key（Tunnels Read+Use），在终端执行 `scripts/set-runtime-key.py --replace`，再只重启本服务。先验证新key连接正常和真实MCP读取，再按本人明确授权处理旧key。不要在聊天或命令参数里放secret，不先撤销仍在使用的key。
+创建时记录表单实际到期时间。到期前本人创建替代专用runtime key（Tunnels Read+Use）。Linux 安装后，由本人在最终安装目录的交互式终端，以服务用户身份运行隐藏输入脚本，再只重启本服务：
+
+```sh
+sudo -u dotsbridge .venv/bin/python scripts/set-runtime-key.py --replace
+sudo systemctl restart dots-wechat-bridge.service
+sudo -u dotsbridge .venv/bin/python scripts/safe-status.py --state-dir runtime/state
+```
+
+需要具有该服务用户/sudo 操作权限；权限不足时由管理员本人执行，不降低 runtime 的700或密钥的600权限。macOS 前台使用 `.venv/bin/python scripts/set-runtime-key.py --replace`，再停止并重启自己的前台隧道。助手不代输入密钥。先验证新key连接正常和真实MCP读取，再按本人明确授权处理旧key。不要在聊天或命令参数里放secret，不先撤销仍在使用的key。
 
 ## 资源
 
-保持模板unit的CPUQuota100%、MemoryHigh256MiB/MemoryMax384MiB、TasksMax64。读取本service cgroup的memory.current、memory.peak、memory.events；只有实际采样才能报告资源峰值。离线resource脚本是小样本，不是压力测试。整机重启、24小时闲置和极限文件仍应按自己的环境验收。
+Linux 保持模板unit的CPUQuota100%、MemoryHigh256MiB/MemoryMax384MiB、TasksMax64。读取本service cgroup的memory.current、memory.peak、memory.events；只有实际采样才能报告资源峰值。macOS 前台没有 systemd/cgroup 资源限额，应用文件/块/缓存/队列限制仍有效，应单独测量进程资源。离线resource脚本是小样本，不是压力测试。整机重启、24小时闲置和极限文件仍应按自己的环境验收。
 
 缓存TTL不清理消息数据库历史；依据自己的私有数据保留策略备份/清理。公开Issue只提供版本、固定错误类别和受控统计，不提供个人原文或完整state。
