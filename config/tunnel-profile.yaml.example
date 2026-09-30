@@ -1,0 +1,15 @@
+# Render this template with scripts/render-config.py; keep generated runtime/ private.
+config_version: 1
+control_plane:
+  tunnel_id: __TUNNEL_ID__
+  api_key: file:__ROOT__/runtime/secrets/runtime.key
+mcp:
+  commands:
+    - channel: main
+      command: __MCP_COMMAND__
+health:
+  listen_addr: 127.0.0.1:0
+  url_file: __ROOT__/runtime/state/service-health.url
+log:
+  level: warn
+  format: json

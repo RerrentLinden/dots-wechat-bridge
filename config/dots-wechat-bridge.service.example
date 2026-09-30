@@ -1,0 +1,29 @@
+[Unit]
+Description=Private dots WeChat MCP bridge
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=12
+
+[Service]
+Type=simple
+User=dotsbridge
+Group=dotsbridge
+WorkingDirectory=__ROOT__
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+CPUQuota=100%
+MemoryHigh=256M
+MemoryMax=384M
+TasksMax=64
+LimitNOFILE=256
+ExecStart=__ROOT__/bin/tunnel-client run --profile-file __ROOT__/runtime/profile.yaml
+Restart=always
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=30
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

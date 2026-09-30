@@ -1,0 +1,6 @@
+# Direct and transitive dependencies, tested on Linux and macOS.
+cryptography==50.0.1
+Pillow==12.3.0
+cffi==2.1.1
+pycparser==3.0
+qrcode==8.2

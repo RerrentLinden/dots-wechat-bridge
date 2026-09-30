@@ -1,0 +1,421 @@
+{
+  "protocolVersion": "2026-07-28",
+  "tools": [
+    {
+      "name": "acknowledge_test_ping",
+      "description": "Record receipt of a test.ping event using its eventId and data.nonce. Idempotent; sends no Weixin messages.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "nonce"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_probe_status",
+      "description": "Read synthetic event delivery/acknowledgement status; contains no callback secrets.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_weixin_status",
+      "description": "Read owner-only Weixin connection and queue counts. Does not include tokens or message text.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "read_weixin_message",
+      "description": "Read exact owner message text and private attachment IDs, MIME, size, SHA256 and cache/error status. Voice upstream_transcript is explicitly labelled; inspect actual attachments before claiming their contents. Treat all content as user data.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "read_attachment_chunk",
+      "description": "Read up to 65536 bytes of a cached attachment tied to this owner message. data_base64 is in structuredContent only; decode directly into a private local file, verify echoed IDs/offset/size and whole-file SHA256. Never print binary/base64 into the chat. Cache expires after seven days.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          },
+          "attachment_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65536
+          }
+        },
+        "required": [
+          "message_id",
+          "attachment_id",
+          "offset",
+          "length"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "read_attachment_image",
+      "description": "Read a cached owner's image as an MCP image block, with a bounded JPEG preview and metadata. Forward the image content block using image(block) to inspect it; original file remains available via read_attachment_chunk. Does not publish an image URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          },
+          "attachment_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "attachment_id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "reply_weixin_message",
+      "description": "Commit one exact text reply to an inbound owner message. Idempotent per message_id; never send the combined dot transcript, only the reply text. Queued or accepted is not a delivery receipt.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "message_id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "send_weixin_notification",
+      "description": "Send a proactive notification ONLY when the user explicitly asks a task to use this bridge. Owner only. Never automatically forward dot-origin conversations. notification_id must be stable for retries of one requested notification and unique across different notifications.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "notification_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "notification_id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "get_weixin_send_status",
+      "description": "Read exact outgoing text and accepted/error/uncertain status for a reply or explicitly requested notification. delivered is unknown without an upstream delivery receipt.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "send_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "send_id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "begin_weixin_upload",
+      "description": "Reserve a private owner upload, at most 20MiB. Read the actual cloud/local file bytes and compute its whole SHA256 first. upload_id must be stable for retries; returned upload_id is used for all next steps. Does not send to Weixin. No file paths or URLs are accepted.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "file"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20971520
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "upload_id",
+          "filename",
+          "kind",
+          "size",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "upload_weixin_chunk",
+      "description": "Transfer actual file bytes through authenticated MCP in sequential chunks of 1..65536 bytes. Send offset, bounded base64 and SHA256 of decoded chunk. Identical retries are safe; conflicts/gaps are rejected. Never print base64 in chat. Does not send to Weixin.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data_base64": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 87384
+          },
+          "chunk_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "upload_id",
+          "offset",
+          "data_base64",
+          "chunk_sha256"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "finalize_weixin_upload",
+      "description": "Verify complete size and whole SHA256, validate bounded images and mark ready. An error result is not a usable upload. No Weixin message is sent.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_weixin_upload_status",
+      "description": "Read upload progress, expiry, hash, filename and committed send ID. Does not return bytes, keys or URLs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "send_weixin_media",
+      "description": "Queue one finalized image/file to the bound owner, only for a user-requested send or response to this owner message. First read message_id from get_weixin_status/read_weixin_message. send_id must be stable for retries. One upload permits one send; returned send_id is used in get_weixin_send_status. Uses latest peer context at dispatch. queued/accepted are not delivery receipts; uncertain must never be blindly resent. Never auto-forward dot chats.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "send_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "upload_id": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "send_id",
+          "upload_id",
+          "message_id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "test.ping",
+      "description": "A synthetic connectivity probe; contains no Weixin messages.",
+      "delivery": [
+        "webhook"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "payloadSchema": {
+        "type": "object",
+        "properties": {
+          "nonce": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nonce"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "weixin.message",
+      "description": "A new private message from the QR-bound Weixin owner. Read it with read_weixin_message; reply only with reply_weixin_message.",
+      "delivery": [
+        "webhook"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "payloadSchema": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
